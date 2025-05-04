@@ -166,5 +166,8 @@ examples = [
 ]
 
 for example in examples:
-    print(f"До: {example}")
-    print(f"После: {word_to_latex(example)}\n")
+    # print(f"До: {example}")
+    # print(f"После: {word_to_latex(example)}\n")
+    while True:
+        text = input("input text copied from word\n\n")
+        print('\n'+word_to_latex(text)+'\n')
