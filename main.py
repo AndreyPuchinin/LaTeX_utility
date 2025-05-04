@@ -54,6 +54,8 @@ def word_to_latex(text):
 
 # "Пусть i(D_1^((1)) )=2,φ(∂D_1^((1))∩γ)=ww и пусть i(D_2^((1)) )=3, φ(∂D_2^((1))∩γ)=ww."
 # Пример использования
-word_text = input("Enter text copied from word\n")
-latex_text = word_to_latex(word_text)
-print(latex_text)
+if __name__ == '__main__':
+    while True:
+        word_text = input("Enter text copied from word\n")
+        latex_text = word_to_latex(word_text)
+        print(latex_text)
