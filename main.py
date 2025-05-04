@@ -2,18 +2,22 @@ import re
 
 # Словарь замен Unicode -> LaTeX
 replacements = {
-    '\\': '\\backslash',
-    'φ': '\\varphi',
-    '∂': '\\partial',
-    '∩': '\\cap',
-    'γ': '\\gamma',
-    "'": '\\prime'
+    '\\': '\\backslash ',
+    'φ': '\\varphi ',
+    '∂': '\\partial ',
+    '∩': '\\cap ',
+    'γ': '\\gamma ',
+    "'": '\\prime ',
+    '∪': '\\cup ',
+    '∈': '\\in ',
+    '⊂': '\\subset '
 }
 
 # Регулярные выражения
-russian_chars = re.compile(r'[а-яА-ЯёЁ, -]')
+russian_chars = re.compile(r'[а-яА-ЯёЁ]')
+russian_with_spaces = re.compile(r'[а-яА-ЯёЁ,\s]')  # Добавлена запятая
 formula_delimiters = re.compile(r'(\$[^$]+\$)')
-hyphen_before_russian = re.compile(r'\$([^$]+)\$(\s*)-(\s*)([а-яА-ЯёЁ])')
+hyphen_after_formula = re.compile(r'\$([^-]+)-\s*\$(\s*)([а-яА-ЯёЁ])')
 
 
 def convert_unicode_to_latex(text):
@@ -47,35 +51,70 @@ def process_brackets(text):
     return text
 
 
+def process_hyphen_after_formula(text):
+    # Обрабатываем случай с дефисом после формулы
+    def replacer(match):
+        formula = match.group(1).strip()
+        spaces = match.group(2)
+        next_char = match.group(3)
+        return f'${formula}$-{next_char}'
+
+    text = hyphen_after_formula.sub(replacer, text)
+    return text
+
+
 def auto_dollar_formulas(text):
     result = []
     i = 0
     n = len(text)
 
     while i < n:
-        if russian_chars.match(text[i]):
-            # Русский символ - добавляем как есть
+        if russian_with_spaces.match(text[i]):
+            # Русский символ или пробел/запятая - добавляем как есть
             result.append(text[i])
             i += 1
         else:
             # Нашли начало формулы
             formula_start = i
+
+            # Собираем всю формулу до следующего русского символа
             while i < n and not russian_chars.match(text[i]):
                 i += 1
+
             formula = text[formula_start:i]
 
-            # Обрабатываем формулу
-            formula = convert_unicode_to_latex(formula)
-            formula = process_brackets(formula)
+            # Проверяем, заканчивается ли формула на "-"
+            if formula.rstrip().endswith('-'):
+                # Разделяем формулу и дефис
+                formula_part = formula[:formula.rfind('-')].rstrip()
+                hyphen_part = '-'
 
-            # Добавляем в результат с $
-            result.append(f'${formula}$')
+                # Обрабатываем основную часть формулы
+                if formula_part:
+                    formula_part = convert_unicode_to_latex(formula_part)
+                    formula_part = process_brackets(formula_part)
+                    # Добавляем пробел перед формулой, если нужно
+                    if result and result[-1].strip() and not result[-1].isspace():
+                        result.append(' ')
+                    result.append(f'${formula_part}$')
+
+                # Добавляем дефис
+                result.append(hyphen_part)
+            else:
+                # Обычная формула без дефиса в конце
+                if formula.strip():
+                    formula = convert_unicode_to_latex(formula)
+                    formula = process_brackets(formula)
+                    # Добавляем пробел перед формулой, если нужно
+                    if result and result[-1].strip() and not result[-1].isspace():
+                        result.append(' ')
+                    result.append(f'${formula.strip()}$ ')
 
     # Собираем результат в строку
     text = ''.join(result)
 
-    # Обрабатываем случай с дефисом после формулы
-    text = hyphen_before_russian.sub(r'$\1$-\4', text)
+    # Дополнительная обработка дефисов после формул
+    text = process_hyphen_after_formula(text)
 
     return text
 
@@ -91,14 +130,26 @@ def word_to_latex(text):
 
         # Сама формула (уже в долларах)
         formula = match.group(1)[1:-1]  # убираем $
-        formula = convert_unicode_to_latex(formula)
-        formula = process_brackets(formula)
-        parts.append(f'${formula}$')
+
+        # Обрабатываем случай с дефисом в конце формулы
+        if formula.rstrip().endswith('-'):
+            formula_part = formula[:formula.rfind('-')].rstrip()
+            if formula_part:
+                formula_part = convert_unicode_to_latex(formula_part)
+                formula_part = process_brackets(formula_part)
+                parts.append(f'${formula_part}$')
+            parts.append('-')
+        else:
+            formula = convert_unicode_to_latex(formula)
+            formula = process_brackets(formula)
+            parts.append(f'${formula}$')
 
         last_end = match.end()
 
     # Добавляем оставшийся текст
-    parts.append(auto_dollar_formulas(text[last_end:]))
+    remaining_text = auto_dollar_formulas(text[last_end:])
+    if remaining_text:
+        parts.append(remaining_text)
 
     return ''.join(parts)
 
@@ -108,7 +159,10 @@ examples = [
     "Рассмотрим D_0 - случай",
     "Пусть i(D_1^((1)) )=2,φ(∂D_1^((1))∩γ)=ww",
     "Функция f(x) - непрерывная",
-    "Множество A_1 ∪ B_2 - замкнуто, относительно себя"
+    "Множество A_1 ∪ B_2 - замкнуто, относительно себя",
+    "Элемент x∈X называется предельной точкой",
+    "Множество A⊂B называется подмножеством",
+    "Теорема 1 - важный результат"
 ]
 
 for example in examples:
