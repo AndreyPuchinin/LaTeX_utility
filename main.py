@@ -56,6 +56,6 @@ def word_to_latex(text):
 # Пример использования
 if __name__ == '__main__':
     while True:
-        word_text = input("Enter text copied from word\n")
+        word_text = input("Enter text copied from word\n\n")
         latex_text = word_to_latex(word_text)
-        print(latex_text)
+        print('\n'+latex_text, '\n')
