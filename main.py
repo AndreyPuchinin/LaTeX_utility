@@ -1,173 +1,176 @@
+import json
+from abc import ABC
 import re
-
-# Словарь замен Unicode -> LaTeX
-replacements = {
-    '\\': '\\backslash ',
-    'φ': '\\varphi ',
-    '∂': '\\partial ',
-    '∩': '\\cap ',
-    'γ': '\\gamma ',
-    "'": '\\prime ',
-    '∪': '\\cup ',
-    '∈': '\\in ',
-    '⊂': '\\subset '
-}
-
-# Регулярные выражения
-russian_chars = re.compile(r'[а-яА-ЯёЁ]')
-russian_with_spaces = re.compile(r'[а-яА-ЯёЁ,\s]')  # Добавлена запятая
-formula_delimiters = re.compile(r'(\$[^$]+\$)')
-hyphen_after_formula = re.compile(r'\$([^-]+)-\s*\$(\s*)([а-яА-ЯёЁ])')
+from pathlib import Path
 
 
-def convert_unicode_to_latex(text):
-    for char, latex in replacements.items():
-        text = text.replace(char, latex)
-    return text
+class Logger(ABC):
+    def __init__(self, logger_name: str):
+        self.logger_name = logger_name
+        self._notes = []
+        self._errors = []
+        self._warnings = []
+        self._pos_msgs = []
+
+    def errors(self) -> None:
+        for one_err in self._errors:
+            self._errors += [one_err]
+
+    def warnings(self) -> None:
+        for one_warning in self._warnings:
+            self._warnings += [one_warning]
+
+    def notes(self) -> None:
+        for one_note in self._notes:
+            self._notes += [one_note]
+
+    def pos_msgs(self) -> None:
+        for one_pos_msgs in self._pos_msgs:
+            self._pos_msgs += [one_pos_msgs]
+
+    def print_one(self, _msgs: list):
+        if _msgs:
+            for one_msg in _msgs:
+                print(one_msg)
+
+    def print_all(self) -> None:
+        print(self.logger_name + ':')
+        self.print_one(self._errors)
+        self.print_one(self._warnings)
+        self.print_one(self._notes)
+        if not self._errors:
+            self.print_one(self._pos_msgs)
+        if not self._errors and \
+                not self._warnings and \
+                not self._notes:
+            print('success!\n')
+
+    def __del__(self):
+        self.print_all()
 
 
-def process_brackets(text):
-    for prefix in ['_', '^']:
-        pattern = re.compile(re.escape(prefix) + r'\(')
-        matches = list(pattern.finditer(text))
+class WordToLatexLogger(Logger):
+    def replacements_not_found(self, path: str) -> None:
+        self._errors += [f"Ошибка: файл словаря '{path}' не найден."]
 
-        for match in reversed(matches):
-            start_pos = match.end() - 1
-            depth = 1
-            end_pos = None
+    def invalid_replacements(self, path: str) -> None:
+        self._errors += [f"Ошибка: файл '{path}' не является валидным JSON."]
 
-            for i in range(start_pos + 1, len(text)):
-                if text[i] == '(':
-                    depth += 1
-                elif text[i] == ')':
-                    depth -= 1
-                    if depth == 0:
-                        end_pos = i
-                        break
-
-            if end_pos is not None:
-                text = text[:start_pos] + '{' + text[start_pos + 1:end_pos] + '}' + text[end_pos + 1:]
-
-    return text
+    def empty_replacements(self, path: str) -> None:
+        self._warnings += [f"Предупреждение: файл JSON {path} пуст."]
 
 
-def process_hyphen_after_formula(text):
-    # Обрабатываем случай с дефисом после формулы
-    def replacer(match):
-        formula = match.group(1).strip()
-        spaces = match.group(2)
-        next_char = match.group(3)
-        return f'${formula}$-{next_char}'
+class MainLogger(Logger):
+    def no_inp_file(self, input_path: str) -> None:
+        self._errors += [f"Ошибка: входной файл '{input_path}' не найден."]
 
-    text = hyphen_after_formula.sub(replacer, text)
-    return text
+    def success(self, output_path: str) -> None:
+        self._pos_msgs += [f"Конвертация завершена. Результат сохранен в '{output_path}'"]
 
 
-def auto_dollar_formulas(text):
-    result = []
-    i = 0
-    n = len(text)
+class WordToLatexConverter:
+    def __init__(self, dictionary_path):
+        self.logger = WordToLatexLogger('word_to_latex_logger')
+        self.dictionary = self.load_dictionary(dictionary_path)
+        self.no_space_after_chars = re.compile(r'[\d\\]')  # Цифры или обратный слеш для проверки после замены
 
-    while i < n:
-        if russian_with_spaces.match(text[i]):
-            # Русский символ или пробел/запятая - добавляем как есть
-            result.append(text[i])
-            i += 1
-        else:
-            # Нашли начало формулы
-            formula_start = i
+    def validate_dictionary_structure(self, dictionary):
+        """Проверяет, что словарь содержит только строковые ключи и значения."""
+        if not isinstance(dictionary, dict):
+            return False
 
-            # Собираем всю формулу до следующего русского символа
-            while i < n and not russian_chars.match(text[i]):
+        for key, value in dictionary.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                return False
+
+        return True
+
+    def load_dictionary(self, path):
+        """Загружает словарь замен из JSON-файла."""
+        result = None
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                # Проверяем, что словарь не пустой и содержит хотя бы одну замену
+                result = json.load(f)
+                if not self.validate_dictionary_structure(result):
+                    self.logger.empty_replacements(path)
+                    return {}
+                else:
+                    return result
+        except FileNotFoundError:
+            self.logger.replacements_not_found(path)
+            return {}
+        except json.JSONDecodeError:
+            self.logger.invalid_replacements(path)
+            return {}
+
+    def replace_symbols(self, text):
+        """Заменяет символы в тексте согласно загруженному словарю."""
+        if not self.dictionary:
+            return text
+
+        # Сначала выполняем все замены
+        for unicode_char, latex_cmd in self.dictionary.items():
+            text = text.replace(unicode_char, latex_cmd)
+
+        # Затем добавляем пробелы где нужно
+        result = []
+        i = 0
+        n = len(text)
+
+        while i < n:
+            # Проверяем, является ли текущая позиция началом какой-либо latex команды
+            found = False
+            for latex_cmd in self.dictionary.values():
+                if text.startswith(latex_cmd, i):
+                    # Добавляем команду в результат
+                    result.append(latex_cmd)
+                    i += len(latex_cmd)
+                    found = True
+
+                    # Проверяем следующий символ
+                    if i < n and not text[i].isdigit() and text[i] != '\\':
+                        result.append(' ')
+                    break
+
+            if not found:
+                result.append(text[i])
                 i += 1
 
-            formula = text[formula_start:i]
+        return ''.join(result)
 
-            # Проверяем, заканчивается ли формула на "-"
-            if formula.rstrip().endswith('-'):
-                # Разделяем формулу и дефис
-                formula_part = formula[:formula.rfind('-')].rstrip()
-                hyphen_part = '-'
-
-                # Обрабатываем основную часть формулы
-                if formula_part:
-                    formula_part = convert_unicode_to_latex(formula_part)
-                    formula_part = process_brackets(formula_part)
-                    # Добавляем пробел перед формулой, если нужно
-                    if result and result[-1].strip() and not result[-1].isspace():
-                        result.append(' ')
-                    result.append(f'${formula_part}$')
-
-                # Добавляем дефис
-                result.append(hyphen_part)
-            else:
-                # Обычная формула без дефиса в конце
-                if formula.strip():
-                    formula = convert_unicode_to_latex(formula)
-                    formula = process_brackets(formula)
-                    # Добавляем пробел перед формулой, если нужно
-                    if result and result[-1].strip() and not result[-1].isspace():
-                        result.append(' ')
-                    result.append(f'${formula.strip()}$ ')
-
-    # Собираем результат в строку
-    text = ''.join(result)
-
-    # Дополнительная обработка дефисов после формул
-    text = process_hyphen_after_formula(text)
-
-    return text
+    def convert(self, input_text):
+        """Основной метод конвертации.
+           Будет пополняться."""
+        return self.replace_symbols(input_text)
 
 
-def word_to_latex(text):
-    # Сначала обрабатываем формулы в долларах, если они есть
-    parts = []
-    last_end = 0
-    for match in formula_delimiters.finditer(text):
-        # Текст до формулы
-        before = text[last_end:match.start()]
-        parts.append(auto_dollar_formulas(before))
+def main():
+    # Настройки путей
+    dictionary_path = 'replacements.json'  # JSON-словарь замен
+    input_path = 'input.txt'  # Входной текстовый файл
+    output_path = 'output.tex'  # Выходной LaTeX-файл
 
-        # Сама формула (уже в долларах)
-        formula = match.group(1)[1:-1]  # убираем $
+    main_logger = MainLogger('main_logger')
 
-        # Обрабатываем случай с дефисом в конце формулы
-        if formula.rstrip().endswith('-'):
-            formula_part = formula[:formula.rfind('-')].rstrip()
-            if formula_part:
-                formula_part = convert_unicode_to_latex(formula_part)
-                formula_part = process_brackets(formula_part)
-                parts.append(f'${formula_part}$')
-            parts.append('-')
-        else:
-            formula = convert_unicode_to_latex(formula)
-            formula = process_brackets(formula)
-            parts.append(f'${formula}$')
+    # Читаем входной файл
+    try:
+        with open(input_path, 'r', encoding='utf-8') as f:
+            input_text = f.read()
+    except FileNotFoundError:
+        main_logger.no_inp_file(input_path)
+        return
 
-        last_end = match.end()
+    # Конвертируем
+    converter = WordToLatexConverter(dictionary_path)
+    output_text = converter.convert(input_text)
 
-    # Добавляем оставшийся текст
-    remaining_text = auto_dollar_formulas(text[last_end:])
-    if remaining_text:
-        parts.append(remaining_text)
+    # Сохраняем результат
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(output_text)
 
-    return ''.join(parts)
+    main_logger.success(output_path)
 
 
-# Пример использования
-examples = [
-    "Рассмотрим D_0 - случай",
-    "Пусть i(D_1^((1)) )=2,φ(∂D_1^((1))∩γ)=ww",
-    "Функция f(x) - непрерывная",
-    "Множество A_1 ∪ B_2 - замкнуто, относительно себя",
-    "Элемент x∈X называется предельной точкой",
-    "Множество A⊂B называется подмножеством",
-    "Теорема 1 - важный результат"
-]
-
-for example in examples:
-    # print(f"До: {example}")
-    # print(f"После: {word_to_latex(example)}\n")
-    while True:
-        text = input("input text copied from word\n\n")
-        print('\n'+word_to_latex(text)+'\n')
+if __name__ == "__main__":
+    main()
