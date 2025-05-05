@@ -59,6 +59,15 @@ class WordToLatexLogger(Logger):
     def empty_replacements(self, path: str) -> None:
         self._warnings += [f"Предупреждение: файл JSON {path} пуст."]
 
+    def check_remaining_tildes(self, text):
+        """Проверяет наличие непрочитанных символов тильды"""
+        matches = re.finditer(chr(771), text)
+        indices = [match.start() for match in matches]
+
+        tilde_pos = text.find(chr(771))
+        if tilde_pos != -1:
+            self._warnings += [f"Обнаружен непрочитанный символ тильды в позициях: {indices}"]
+
 
 class MainLogger(Logger):
     def no_inp_file(self, input_path: str) -> None:
@@ -178,7 +187,12 @@ class WordToLatexConverter:
                     result.append(text[i])
                 i += 1
 
-        return ''.join(result)
+        result = ''.join(result)
+
+        if chr(771) in result:
+            self.logger.check_remaining_tildes(result)
+
+        return result
 
     def replace_symbols(self, text):
         """Заменяет символы в тексте согласно загруженному словарю."""
