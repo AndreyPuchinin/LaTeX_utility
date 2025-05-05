@@ -176,7 +176,7 @@ class WordToLatexConverter:
                 close_pos = self.find_matching_bracket(text, i)
                 if close_pos != -1 and close_pos + 1 < n and text[close_pos + 2] == tilde_char:
                     # Нашли конструкцию (text)<тильда>
-                    result.append(f"\\widetild{{{text[i + 1:close_pos]}}}")
+                    result.append(f"\\widetilde{{{text[i + 1:close_pos]}}}")
                     i = close_pos + 3  # Пропускаем и закрывающую скобку и тильду
                 else:
                     result.append(text[i])
