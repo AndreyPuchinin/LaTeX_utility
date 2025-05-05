@@ -195,7 +195,8 @@ class WordToLatexConverter:
         return result
 
     def wrap_formulas(self, text):
-        """Оборачивает формулы в $...$ с учетом всех правил"""
+        """Оборачивает формулы в $...$ с учетом всех правил
+           НЕ РАБОТАЕТ!!! ТЕСТИТЬ!!"""
         result = []
         i = 0
         n = len(text)
@@ -246,7 +247,8 @@ class WordToLatexConverter:
         return ''.join(result)
 
     def is_inside_brackets(self, text_fragment):
-        """Проверяет, находится ли русский текст внутри скобок формулы"""
+        """Проверяет, находится ли русский текст внутри скобок формулы
+           НЕ РАБОТАЕТ!!! ТЕСТИТЬ!!"""
         fragment = ''.join(text_fragment)
         stack = []
 
