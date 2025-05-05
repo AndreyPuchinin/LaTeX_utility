@@ -194,6 +194,72 @@ class WordToLatexConverter:
 
         return result
 
+    def wrap_formulas(self, text):
+        """Оборачивает формулы в $...$ с учетом всех правил"""
+        result = []
+        i = 0
+        n = len(text)
+        in_formula = False
+        russian_re = re.compile(r'[а-яА-ЯёЁ]')
+        non_russian_re = re.compile(r'[^а-яА-ЯёЁ\s]')  # Исключаем пробелы
+
+        while i < n:
+            if not in_formula:
+                # Ищем начало формулы (переход с русского на не-русский)
+                if i > 0 and russian_re.match(text[i - 1]) and non_russian_re.match(text[i]):
+                    result.append('$')
+                    in_formula = True
+                result.append(text[i])
+                i += 1
+            else:
+                # Мы внутри формулы - собираем до первого русского символа
+                formula_parts = []
+                while i < n:
+                    if russian_re.match(text[i]):
+                        # Обрабатываем русский текст внутри формулы
+                        russian_text = []
+                        while i < n and russian_re.match(text[i]):
+                            russian_text.append(text[i])
+                            i += 1
+
+                        # Проверяем специальные случаи
+                        if (i < n and text[i] in ('^', '_')) or \
+                                self.is_inside_brackets(formula_parts + russian_text):
+                            formula_parts.append(r'\text{' + ''.join(russian_text) + '}')
+                        else:
+                            # Конец формулы
+                            result.append(''.join(formula_parts))
+                            result.append('$')
+                            result.extend(russian_text)
+                            in_formula = False
+                            break
+                    else:
+                        formula_parts.append(text[i])
+                        i += 1
+
+                if in_formula and i >= n:
+                    # Формула до конца текста
+                    result.append(''.join(formula_parts))
+                    result.append('$')
+                    in_formula = False
+
+        return ''.join(result)
+
+    def is_inside_brackets(self, text_fragment):
+        """Проверяет, находится ли русский текст внутри скобок формулы"""
+        fragment = ''.join(text_fragment)
+        stack = []
+
+        for i, c in enumerate(fragment):
+            if c == '(':  # or { ?..
+                stack.append(i)
+            elif c == ')':  # or } ?..
+                if stack:
+                    stack.pop()
+
+        # Если после русского текста есть незакрытые скобки
+        return bool(stack)
+
     def replace_symbols(self, text):
         """Заменяет символы в тексте согласно загруженному словарю."""
         if not self.dictionary:
@@ -235,6 +301,7 @@ class WordToLatexConverter:
         input_text = self.replace_symbols(input_text)  # Сперва выполним замены, чтобы не \ -> \backslash
         input_text = self.process_widetilde(input_text)
         input_text = self.process_special_brackets(input_text)
+        input_text = self.wrap_formulas(input_text)
         return input_text
 
 

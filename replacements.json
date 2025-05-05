@@ -1,5 +1,6 @@
 {
     "\\": "\\backslash",
+    "$": "\\$",
     "φ": "\\varphi",
     "∅": "\\emptyset",
     "∂": "\\partial",
