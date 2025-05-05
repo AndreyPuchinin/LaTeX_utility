@@ -104,6 +104,82 @@ class WordToLatexConverter:
             self.logger.invalid_replacements(path)
             return {}
 
+    def find_matching_bracket(self, text, start_pos, open_bracket='(', close_bracket=')'):
+        """
+        Находит позицию закрывающей скобки того же уровня вложенности.
+        Возвращает позицию закрывающей скобки или -1 если не найдено.
+        """
+        if start_pos >= len(text) or text[start_pos] != open_bracket:
+            return -1
+
+        level = 1
+        pos = start_pos + 1
+
+        while pos < len(text):
+            if text[pos] == open_bracket:
+                level += 1
+            elif text[pos] == close_bracket:
+                level -= 1
+                if level == 0:
+                    return pos
+            pos += 1
+
+        return -1  # Не найдена закрывающая скобка
+
+    def process_special_brackets(self, text):
+        """
+        Обрабатывает специальные скобки: ^( -> ^{ }, _( -> _{ }
+        """
+        result = []
+        i = 0
+        n = len(text)
+
+        while i < n:
+            if i + 1 < n and text[i] in ('^', '_') and text[i + 1] == '(':
+                # Нашли специальную скобку
+                close_pos = self.find_matching_bracket(text, i + 1)
+                if close_pos != -1:
+                    # Заменяем скобки
+                    result.append(f"{text[i]}{{{text[i + 2:close_pos]}}}")
+                    i = close_pos + 1
+                else:
+                    # Нет закрывающей скобки - оставляем как есть
+                    result.append(text[i])
+                    i += 1
+            else:
+                result.append(text[i])
+                i += 1
+
+        return ''.join(result)
+
+    def process_widetilde(self, text):
+        """
+        Обрабатывает "(text)<символ 771>" -> "\widetild{text}"
+        Удаляет только те символы 771, которые участвуют в преобразовании
+        """
+        tilde_char = chr(771)  # Символ тильды-акцента
+        result = []
+        i = 0
+        n = len(text)
+
+        while i < n:
+            if text[i] == '(':
+                close_pos = self.find_matching_bracket(text, i)
+                if close_pos != -1 and close_pos + 1 < n and text[close_pos + 2] == tilde_char:
+                    # Нашли конструкцию (text)<тильда>
+                    result.append(f"\\widetild{{{text[i + 1:close_pos]}}}")
+                    i = close_pos + 3  # Пропускаем и закрывающую скобку и тильду
+                else:
+                    result.append(text[i])
+                    i += 1
+            else:
+                # Оставляем символ, если это не обрабатываемая тильда
+                if text[i] != tilde_char or (i > 0 and text[i - 1] != ')'):
+                    result.append(text[i])
+                i += 1
+
+        return ''.join(result)
+
     def replace_symbols(self, text):
         """Заменяет символы в тексте согласно загруженному словарю."""
         if not self.dictionary:
@@ -142,7 +218,10 @@ class WordToLatexConverter:
     def convert(self, input_text):
         """Основной метод конвертации.
            Будет пополняться."""
-        return self.replace_symbols(input_text)
+        input_text = self.replace_symbols(input_text)  # Сперва выполним замены, чтобы не \ -> \backslash
+        input_text = self.process_widetilde(input_text)
+        input_text = self.process_special_brackets(input_text)
+        return input_text
 
 
 def main():
