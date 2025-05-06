@@ -1,6 +1,7 @@
 import json
 from abc import ABC
 import re
+from pprint import pprint
 from pathlib import Path
 
 
@@ -174,7 +175,8 @@ class WordToLatexConverter:
         while i < n:
             if text[i] == '(':
                 close_pos = self.find_matching_bracket(text, i)
-                if close_pos != -1 and close_pos + 1 < n and text[close_pos + 2] == tilde_char:
+                if close_pos != -1 and close_pos+2 < len(text) and \
+                        close_pos + 1 < n and text[close_pos + 2] == tilde_char:
                     # Нашли конструкцию (text)<тильда>
                     result.append(f"\\widetilde{{{text[i + 1:close_pos]}}}")
                     i = close_pos + 3  # Пропускаем и закрывающую скобку и тильду
@@ -222,7 +224,7 @@ class WordToLatexConverter:
                 # Не-русский сегмент (формула)
                 segment = []
                 # Пока формула
-                while i < n and not russian_re.match(text[i]) or text[i].isspace():
+                while i < n and (not russian_re.match(text[i]) or text[i].isspace()):
                     segment.append(text[i])
                     i += 1
                 # Формула кончилась (или конец строки)
@@ -230,6 +232,50 @@ class WordToLatexConverter:
                     segments.append(('non_ru', ''.join(segment)))
 
         return segments
+
+    def process_segments(self, segments):
+        """Обрабатывает сегменты согласно правилам для формул"""
+        processed_segments = segments
+        i = 0
+        n = len(segments)
+
+        while i < n:
+            current_type, current_text = processed_segments[i]
+
+            current_text = current_text.strip()
+
+            # Правило 1: русский сегмент перед ^ или _ в английском
+            if (current_type == 'ru' and i + 1 < n and
+                    segments[i + 1][0] == 'non_ru' and
+                    segments[i + 1][1][0] in ('^', '_')):
+
+                # Оборачиваем русский текст в \text{}
+                processed_segments[i] = ('non_ru', f'\\text{{{current_text}}}')
+
+                # Оставляем ^ или _ как есть
+                processed_segments[i+1] = ('non_ru', segments[i + 1][1])
+                i += 1
+            # Правило 2: английский сегмент с ^ или _ перед русским
+            elif (current_type == 'non_ru' and i + 1 < n and
+                  segments[i + 1][0] == 'ru' and
+                  current_text[-1] in ('^', '_')):
+
+                # Добавляем английскую часть с ^ или _
+                processed_segments[i] = ('non_ru', current_text)
+
+                # Оборачиваем русский текст в \text{}
+                processed_segments[i+1] = ('non_ru', f'\\text{{{segments[i + 1][1]}}}')
+                i += 1
+
+            # Правило 3: русский сегмент внутри {} в английских сегментах
+                pass
+
+            else:
+                # Без изменений
+                processed_segments[i] = (current_type, current_text)
+                i += 1
+
+        return processed_segments
 
     def replace_symbols(self, text):
         """Заменяет символы в тексте согласно загруженному словарю."""
@@ -272,7 +318,7 @@ class WordToLatexConverter:
         input_text = self.replace_symbols(input_text)  # Сперва выполним замены, чтобы не \ -> \backslash
         input_text = self.process_widetilde(input_text)
         input_text = self.process_special_brackets(input_text)
-        print(self.segment_text(input_text))
+        pprint(self.process_segments(self.segment_text(input_text)))
         return input_text
 
 
