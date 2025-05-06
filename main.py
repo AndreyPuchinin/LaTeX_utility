@@ -387,6 +387,18 @@ class WordToLatexConverter:
         """Собирает итоговый текст из обработанных сегментов"""
         return ''.join(segment_text for _, segment_text in segments)
 
+    def escape_special_chars(self, text):
+        """Заменяет ^ и _ на \textasciicircum и \_ перед основными преобразованиями"""
+        # Сначала заменяем обратные слеши, чтобы не экранировать наши новые команды
+        text = text.replace('\\', '\\backslash')
+
+        # Затем заменяем специальные символы
+        text = text.replace('\\', '\\backslash')
+        text = text.replace('^', '\\textasciicircum ')
+        text = text.replace('_', '\\_')
+
+        return text
+
     def replace_symbols(self, text):
         """Заменяет символы в тексте согласно загруженному словарю."""
         if not self.dictionary:
@@ -396,12 +408,35 @@ class WordToLatexConverter:
         for unicode_char, latex_cmd in self.dictionary.items():
             text = text.replace(unicode_char, latex_cmd)
 
+        # Затем обрабатываем специальные команды для пробелов
+        special_commands = {
+            '\\backslash': '\\backslash',
+            '\\_': '\\_',
+            '\\textasciicircum': '\\textasciicircum'
+        }
+
         # Затем добавляем пробелы где нужно
         result = []
         i = 0
         n = len(text)
 
         while i < n:
+            # Проверяем специальные команды
+            cmd_found = False
+            for cmd in special_commands.values():
+                if text.startswith(cmd, i):
+                    result.append(cmd)
+                    i += len(cmd)
+                    cmd_found = True
+
+                    # Добавляем пробел если нужно
+                    if i < n and not text[i].isdigit() and text[i] != '\\':
+                        result.append(' ')
+                    break
+
+            if cmd_found:
+                continue
+
             # Проверяем, является ли текущая позиция началом какой-либо latex команды
             found = False
             for latex_cmd in self.dictionary.values():
@@ -469,6 +504,9 @@ class WordToLatexConverter:
     def convert(self, input_text):
         """Основной метод конвертации.
            Будет пополняться."""
+
+        # 0. Экранируем специальные символы в самом начале
+        input_text = self.escape_special_chars(input_text)
 
         # 1. Обработка widetilde
         input_text = self.process_widetilde(input_text)
