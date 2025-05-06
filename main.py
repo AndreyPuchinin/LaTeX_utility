@@ -410,7 +410,7 @@ class WordToLatexConverter:
             # Обрабатываем ^ и _ с учетом контекста
             elif text[i] in ('^', '_'):
                 # Проверяем предыдущий символ
-                if i + 1 < n and text[i + 1] not in ('(', '{'):
+                if i + 1 < n and text[i+1] not in ('(', '{'):
                     if text[i] == '^':
                         result.append('\\textasciicircum ')
                     else:
