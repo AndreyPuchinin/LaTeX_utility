@@ -295,7 +295,6 @@ class WordToLatexConverter:
     def process_segments(self, segments):
         """Обрабатывает сегменты согласно правилам для формул"""
         processed_segments = segments.copy()
-        print(processed_segments)
         i = 0
 
         while i < len(processed_segments):
