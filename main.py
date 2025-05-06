@@ -299,7 +299,6 @@ class WordToLatexConverter:
             result_segments.append(('non_ru', before))
         result_segments.append(('non_ru', '{'))
         result_segments.append(('non_ru', ''.join(processed_parts)))
-        result_segments.append(('non_ru', '}'))
 
         # Заменяем обработанные сегменты
         end_index = i + 1 if i < n else i
@@ -423,6 +422,50 @@ class WordToLatexConverter:
 
         return ''.join(result)
 
+    def wrap_formulas(self, text):
+        """Автоматически обрамляет формулы в $...$ с учетом скобок"""
+        result = []
+        i = 0
+        n = len(text)
+        russian_re = re.compile(r'[а-яА-ЯёЁ()]')
+
+        while i < n:
+            # 1. Ищем начало формулы (первый нерусский символ)
+            if i > 0 and russian_re.match(text[i - 1]) and not russian_re.match(text[i]) and text[i] not in ('$', ' '):
+                result.append('$')
+                formula_start = len(result)
+
+                # 2. Собираем формулу до русского символа
+                while i < n:
+                    # 3. Пропускаем содержимое скобок
+                    if text[i] in ('{', '('):
+                        bracket_type = text[i]
+                        close_pos = self.find_matching_bracket(text, i)
+                        if close_pos == -1:
+                            close_pos = n - 1
+
+                        # Добавляем всё содержимое скобок
+                        result.append(text[i:close_pos + 1])
+                        i = close_pos + 1
+                        continue
+
+                    # 4. Проверяем на русский символ (конец формулы)
+                    if russian_re.match(text[i]):
+                        result.append('$')
+                        break
+
+                    result.append(text[i])
+                    i += 1
+
+                # Если дошли до конца без русского символа
+                if i >= n and len(result) > formula_start:
+                    result.append('$')
+            else:
+                result.append(text[i])
+                i += 1
+
+        return ''.join(result)
+
     def convert(self, input_text):
         """Основной метод конвертации.
            Будет пополняться."""
@@ -438,11 +481,15 @@ class WordToLatexConverter:
         # 4. Обработка ^() и _() -> ^{} и _{} соответственно
         input_text = self.replace_power_brackets(input_text)
 
-        # 5. Разбиение на сегменты и их обработка
+        # 5. Добавляем автообрамление $...$ с учетом всех особенностей
+        # (перепрыгивает через () и {})
+        input_text = self.wrap_formulas(input_text)
+
+        # 6. Разбиение на сегменты и их обработка
         segments = self.segment_text(input_text)
         processed_segments = self.process_segments(segments)
 
-        # 6. Сборка итогового текста
+        # 7. Сборка итогового текста
         output_text = self.build_text_from_segments(processed_segments)
 
         pprint(self.process_segments(self.segment_text(input_text)))
