@@ -239,7 +239,6 @@ class WordToLatexConverter:
         i = start_index
         n = len(segments)
         new_segments = segments.copy()
-        after_close = ''
 
         # Ищем открывающую {
         if i >= n or new_segments[i][0] != 'non_ru' or '{' not in new_segments[i][1]:
