@@ -175,7 +175,7 @@ class WordToLatexConverter:
         while i < n:
             if text[i] == '(':
                 close_pos = self.find_matching_bracket(text, i)
-                if close_pos != -1 and close_pos+2 < len(text) and \
+                if close_pos != -1 and close_pos + 2 < len(text) and \
                         close_pos + 1 < n and text[close_pos + 2] == tilde_char:
                     # Нашли конструкцию (text)<тильда>
                     result.append(f"\\widetilde{{{text[i + 1:close_pos]}}}")
@@ -239,6 +239,7 @@ class WordToLatexConverter:
         i = start_index
         n = len(segments)
         new_segments = segments.copy()
+        after_close = ''
 
         # Ищем открывающую {
         if i >= n or new_segments[i][0] != 'non_ru' or '{' not in new_segments[i][1]:
@@ -252,7 +253,6 @@ class WordToLatexConverter:
         # Собираем все содержимое внутри {}
         collected = []
         found_close = False
-        after_close = ''
 
         while i < n:
             seg_type, seg_text = new_segments[i]
@@ -270,7 +270,7 @@ class WordToLatexConverter:
                 found_close = True
                 break
 
-            collected.append((seg_type, seg_text.strip()))
+            collected.append((seg_type, seg_text))
             i += 1
 
         if not found_close:
@@ -281,15 +281,12 @@ class WordToLatexConverter:
         processed_parts = []
         for seg_type, seg_text in collected:
             if seg_type == 'ru':
-                processed_parts.append(f'\\text{{{seg_text}}}')
+                processed_parts.append(f'\\text{{{seg_text.strip()}}}')
             else:
                 processed_parts.append(seg_text)
 
         # Собираем результат
-        result_text = ''.join(processed_parts) + '}'
-
-        if after_close:
-            new_segments[i] = ('non_ru', after_close)
+        result_text = ''.join(processed_parts)
 
         # Вставляем обработанный текст
         new_segments[start_index + 1:i] = [('non_ru', result_text)]
@@ -298,7 +295,8 @@ class WordToLatexConverter:
 
     def process_segments(self, segments):
         """Обрабатывает сегменты согласно правилам для формул"""
-        processed_segments = segments
+        processed_segments = segments.copy()
+        print(processed_segments)
         i = 0
 
         while i < len(processed_segments):
@@ -315,7 +313,7 @@ class WordToLatexConverter:
                 processed_segments[i] = ('non_ru', f'\\text{{{current_text}}}')
 
                 # Оставляем ^ или _ как есть
-                processed_segments[i+1] = ('non_ru', segments[i + 1][1])
+                processed_segments[i + 1] = ('non_ru', segments[i + 1][1])
                 i += 1
             # Правило 2: английский сегмент с ^ или _ перед русским
             elif (current_type == 'non_ru' and i + 1 < len(processed_segments) and
@@ -326,11 +324,14 @@ class WordToLatexConverter:
                 processed_segments[i] = ('non_ru', current_text)
 
                 # Оборачиваем русский текст в \text{}
-                processed_segments[i+1] = ('non_ru', f'\\text{{{segments[i + 1][1]}}}')
+                processed_segments[i + 1] = ('non_ru', f'\\text{{{segments[i + 1][1].strip()}}}')
                 i += 1
 
             # Правило 3: русский сегмент внутри {} в английских сегментах
-            elif current_type == 'non_ru' and '{' in current_text:
+            elif current_type == 'non_ru' and '{' in current_text and \
+                    not '^{' in current_text and \
+                    not '_{' in current_text and \
+                    not '\\text{' in current_text:
                 processed_segments, i = self.process_russian_in_brackets(processed_segments, i)
 
             else:
@@ -401,6 +402,7 @@ class WordToLatexConverter:
         pprint(self.process_segments(self.segment_text(input_text)))
 
         return output_text
+
 
 def main():
     # Настройки путей
