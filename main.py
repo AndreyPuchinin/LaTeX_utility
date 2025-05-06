@@ -245,36 +245,45 @@ class WordToLatexConverter:
             return new_segments, i
 
         # Разделяем текст до { и после
-        before, bracket_part = new_segments[i][1].split('{', 1)
-        new_segments[i] = ('non_ru', before + '{')
-        i += 1
+        before, bracket_part = new_segments[i][1].rsplit('{', 1)
+        if before:
+            new_segments[i] = ('non_ru', before)
+            i += 1
+            new_segments.insert(i, ('non_ru', '{'))
+
+        i += 1  # Переходим к содержимому скобок
 
         # Собираем все содержимое внутри {}
         collected = []
-        found_close = False
+        bracket_level = 1  # Учитываем вложенность
 
-        while i < n:
+        while i < n and bracket_level > 0:
             seg_type, seg_text = new_segments[i]
 
-            # Проверяем на наличие закрывающей }
-            if '}' in seg_text:
-                close_pos = seg_text.find('}')
-                before_close = seg_text[:close_pos]
-                after_close = seg_text[close_pos + 1:]
+            # Обрабатываем каждый символ для учета вложенных скобок
+            processed_text = []
+            for char in seg_text:
+                if char == '{':
+                    bracket_level += 1
+                elif char == '}':
+                    bracket_level -= 1
+                    if bracket_level == 0:
+                        break  # Нашли закрывающую скобку
+                processed_text.append(char)
 
-                if before_close:
-                    collected.append((seg_type, before_close))
+            remaining_text = seg_text[len(processed_text):]
 
+            # Добавляем обработанную часть
+            if processed_text:
+                collected.append((seg_type, ''.join(processed_text)))
+
+            if bracket_level == 0:
                 # Нашли закрывающую }
-                found_close = True
+                if remaining_text.startswith('}'):
+                    new_segments[i] = (seg_type, remaining_text[1:])
                 break
 
-            collected.append((seg_type, seg_text))
             i += 1
-
-        if not found_close:
-            # Не нашли закрывающую } - откатываем изменения
-            return segments, start_index
 
         # Обрабатываем собранные сегменты
         processed_parts = []
@@ -285,19 +294,25 @@ class WordToLatexConverter:
                 processed_parts.append(seg_text)
 
         # Собираем результат
-        result_text = ''.join(processed_parts)
+        result_segments = []
+        if before:
+            result_segments.append(('non_ru', before))
+        result_segments.append(('non_ru', '{'))
+        result_segments.append(('non_ru', ''.join(processed_parts)))
+        result_segments.append(('non_ru', '}'))
 
-        # Вставляем обработанный текст
-        new_segments[start_index + 1:i] = [('non_ru', result_text)]
+        # Заменяем обработанные сегменты
+        end_index = i + 1 if i < n else i
+        new_segments[start_index:end_index] = result_segments
 
-        return new_segments, start_index + 2
+        return new_segments, start_index + len(result_segments)
 
     def process_segments(self, segments):
         """Обрабатывает сегменты согласно правилам для формул"""
         processed_segments = segments.copy()
         i = 0
 
-        while i < len(processed_segments):
+        while i < len(processed_segments) and i != -1:
             current_type, current_text = processed_segments[i]
 
             current_text = current_text.strip()
@@ -338,6 +353,36 @@ class WordToLatexConverter:
                 i += 1
 
         return processed_segments
+
+    def replace_power_brackets(self, text):
+        """Заменяет ^(...) на ^{...} и _(...) на _{...} с учетом уровней вложенности"""
+        result = []
+        i = 0
+        n = len(text)
+
+        while i < n:
+            if i + 1 < n and text[i] in ('^', '_') and text[i + 1] == '(':
+                # Нашли ^( или _(
+                operator = text[i]
+                result.append(operator + '{')  # Заменяем ( на {
+                i += 2
+
+                # Ищем соответствующую закрывающую скобку
+                close_pos = self.find_matching_bracket(text, i - 1)  # i-1 потому что скобка на предыдущей позиции
+                if close_pos != -1:
+                    # Добавляем содержимое
+                    result.append(text[i:close_pos])
+                    result.append('}')  # Заменяем ) на }
+                    i = close_pos + 1
+                else:
+                    # Закрывающая скобка не найдена - оставляем как есть
+                    result.append(text[i - 1:i + 1])
+                    i += 1
+            else:
+                result.append(text[i])
+                i += 1
+
+        return ''.join(result)
 
     def build_text_from_segments(self, segments):
         """Собирает итоговый текст из обработанных сегментов"""
@@ -390,11 +435,14 @@ class WordToLatexConverter:
         # 3. Обработка специальных скобок
         input_text = self.process_special_brackets(input_text)
 
-        # 4. Разбиение на сегменты и их обработка
+        # 4. Обработка ^() и _() -> ^{} и _{} соответственно
+        input_text = self.replace_power_brackets(input_text)
+
+        # 5. Разбиение на сегменты и их обработка
         segments = self.segment_text(input_text)
         processed_segments = self.process_segments(segments)
 
-        # 5. Сборка итогового текста
+        # 6. Сборка итогового текста
         output_text = self.build_text_from_segments(processed_segments)
 
         pprint(self.process_segments(self.segment_text(input_text)))
