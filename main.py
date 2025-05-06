@@ -340,6 +340,10 @@ class WordToLatexConverter:
 
         return processed_segments
 
+    def build_text_from_segments(self, segments):
+        """Собирает итоговый текст из обработанных сегментов"""
+        return ''.join(segment_text for _, segment_text in segments)
+
     def replace_symbols(self, text):
         """Заменяет символы в тексте согласно загруженному словарю."""
         if not self.dictionary:
@@ -378,12 +382,25 @@ class WordToLatexConverter:
     def convert(self, input_text):
         """Основной метод конвертации.
            Будет пополняться."""
-        input_text = self.replace_symbols(input_text)  # Сперва выполним замены, чтобы не \ -> \backslash
-        input_text = self.process_widetilde(input_text)
-        input_text = self.process_special_brackets(input_text)
-        pprint(self.process_segments(self.segment_text(input_text)))
-        return input_text
+        # 1. Замена символов по словарю
+        input_text = self.replace_symbols(input_text)
 
+        # 2. Обработка widetilde
+        input_text = self.process_widetilde(input_text)
+
+        # 3. Обработка специальных скобок
+        input_text = self.process_special_brackets(input_text)
+
+        # 4. Разбиение на сегменты и их обработка
+        segments = self.segment_text(input_text)
+        processed_segments = self.process_segments(segments)
+
+        # 5. Сборка итогового текста
+        output_text = self.build_text_from_segments(processed_segments)
+
+        pprint(self.process_segments(self.segment_text(input_text)))
+
+        return output_text
 
 def main():
     # Настройки путей
