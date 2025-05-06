@@ -469,30 +469,29 @@ class WordToLatexConverter:
     def convert(self, input_text):
         """Основной метод конвертации.
            Будет пополняться."""
-        # 1. Замена символов по словарю
-        input_text = self.replace_symbols(input_text)
 
-        # 2. Обработка widetilde
+        # 1. Обработка widetilde
         input_text = self.process_widetilde(input_text)
 
-        # 3. Обработка специальных скобок
+        # 2. Обработка специальных скобок
         input_text = self.process_special_brackets(input_text)
 
-        # 4. Обработка ^() и _() -> ^{} и _{} соответственно
+        # 3. Обработка ^() и _() -> ^{} и _{} соответственно
         input_text = self.replace_power_brackets(input_text)
 
-        # 5. Добавляем автообрамление $...$ с учетом всех особенностей
+        # 4. Добавляем автообрамление $...$ с учетом всех особенностей
         # (перепрыгивает через () и {})
         input_text = self.wrap_formulas(input_text)
 
-        # 6. Разбиение на сегменты и их обработка
+        # 5. Разбиение на сегменты и их обработка
         segments = self.segment_text(input_text)
         processed_segments = self.process_segments(segments)
 
-        # 7. Сборка итогового текста
+        # 6. Сборка итогового текста
         output_text = self.build_text_from_segments(processed_segments)
 
-        pprint(self.process_segments(self.segment_text(input_text)))
+        # 7. Замена символов по словарю
+        output_text = self.replace_symbols(output_text)
 
         return output_text
 
