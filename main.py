@@ -314,7 +314,7 @@ class WordToLatexConverter:
         while i < len(processed_segments) and i != -1:
             current_type, current_text = processed_segments[i]
 
-            current_text = current_text.strip()
+            current_text = current_text
 
             # Правило 1: русский сегмент перед ^ или _ в английском
             if (current_type == 'ru' and i + 1 < len(processed_segments) and
@@ -322,7 +322,7 @@ class WordToLatexConverter:
                     segments[i + 1][1][0] in ('^', '_')):
 
                 # Оборачиваем русский текст в \text{}
-                processed_segments[i] = ('non_ru', f'\\text{{{current_text}}}')
+                processed_segments[i] = ('non_ru', f'\\text{{{current_text.strip()}}}')
 
                 # Оставляем ^ или _ как есть
                 processed_segments[i + 1] = ('non_ru', segments[i + 1][1])
@@ -388,16 +388,41 @@ class WordToLatexConverter:
         return ''.join(segment_text for _, segment_text in segments)
 
     def escape_special_chars(self, text):
-        """Заменяет ^ и _ на \textasciicircum и \_ перед основными преобразованиями"""
-        # Сначала заменяем обратные слеши, чтобы не экранировать наши новые команды
-        text = text.replace('\\', '\\backslash')
+        """Заменяет специальные символы с учетом контекста"""
+        result = []
+        i = 0
+        n = len(text)
 
-        # Затем заменяем специальные символы
-        text = text.replace('\\', '\\backslash')
-        text = text.replace('^', '\\textasciicircum ')
-        text = text.replace('_', '\\_')
+        while i < n:
+            # Обрабатываем обратный слеш
+            if text[i] == '\\':
+                # Проверяем, не экранирован ли уже этот слеш
+                if i > 0 and text[i - 1] == '\\':
+                    result.append('\\backslash')
+                    i += 1
+                else:
+                    result.append('\\backslash')
+                    i += 1
+            # Обрабатываем $
+            elif text[i] == '$':
+                result.append('\\$')
+                i += 1
+            # Обрабатываем ^ и _ с учетом контекста
+            elif text[i] in ('^', '_'):
+                # Проверяем предыдущий символ
+                if i + 1 < n and text[i + 1] not in ('(', '{'):
+                    if text[i] == '^':
+                        result.append('\\textasciicircum ')
+                    else:
+                        result.append('\\_')
+                else:
+                    result.append(text[i])
+                i += 1
+            else:
+                result.append(text[i])
+                i += 1
 
-        return text
+        return ''.join(result)
 
     def replace_symbols(self, text):
         """Заменяет символы в тексте согласно загруженному словарю."""
@@ -462,11 +487,13 @@ class WordToLatexConverter:
         result = []
         i = 0
         n = len(text)
-        russian_re = re.compile(r'[а-яА-ЯёЁ()]')
+        russian_re = re.compile(r'[а-яА-ЯёЁ()\-,.?!:;]')
 
         while i < n:
             # 1. Ищем начало формулы (первый нерусский символ)
-            if i > 0 and russian_re.match(text[i - 1]) and not russian_re.match(text[i]) and text[i] not in ('$', ' '):
+            if i == 0 and not russian_re.match(text[i]) and text[i] not in ('$', ' ') or \
+                    i > 0 and russian_re.match(text[i - 1]) and not russian_re.match(text[i]) and text[i] not in (
+                    '$', ' '):
                 result.append('$')
                 formula_start = len(result)
 
@@ -475,7 +502,7 @@ class WordToLatexConverter:
                     # 3. Пропускаем содержимое скобок
                     if text[i] in ('{', '('):
                         bracket_type = text[i]
-                        close_pos = self.find_matching_bracket(text, i)
+                        close_pos = self.find_matching_bracket(text, i, "{", "}")
                         if close_pos == -1:
                             close_pos = n - 1
 
